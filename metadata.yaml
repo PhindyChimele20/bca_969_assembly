@@ -1,8 +1,8 @@
-paper_title: Transcriptional landscape of the cell cycle in a model thermoacidophilic archaeon reveals similarities to eukaryotes
+paper_title: Genome assembly, comparative genomics, and identification of genes/pathways underlying plant growth-promoting traits of an actinobacterial strain, Amycolatopsis sp. (BCA-696)
 doi: 10.1038/s41467-025-60613-8
-data_source: "GEO: GSE296035."
-domain: rna_seq
-ref_genome: S. islandicus REY15A genome (RefSeq accession number: NC_017276)
-tools: [bowtie2-2.4.1, samtools-1.18, subread-2.0.8, featureCounts 2.0.4, edgeR]
-estimated_runtime_minutes: 170
-estimated_time_for_human: 210
+data_source: "NCBI:Bioproject ID: PRJNA765508"
+domain: whole_genome_sequencing
+ref_genome: De novo assembly, no ref_genome
+tools: [fastqc/0.12.1, trimmomatic/0.39, SOAPdenovo2/2.04, spades/3.15.5, quast/5.2.0]
+estimated_runtime_minutes: 300
+estimated_time_for_human: 430

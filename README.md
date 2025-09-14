@@ -2,18 +2,17 @@
 
 ## 1. Data sources
 
-This task is based on on publicly available sequencing data from the study "Genomic characterization of Enterobacter sp. PGRG2 and Achromobacter insolitus PGRG5: bacterial strains isolated from soil present near electronics manufacture industry for heavy metal remediation" which focused on generating whole-genome sequence of PGRG5 and the draft genome sequence of PGRG2 strains isolated from electronic waste contaminated soil. Whole genome sequencing was done on both extracted strains where a sequencing library with paired-end reads (2 × 150 bp) was created and subsequently subjected to sequencing on the NovaSeq 6000 platform provided by Illumina (3). For this analysis only PGRG5 strain was used where the fastq forward and reverse reads are used as the inputs for the workflow.
+This task is based on on publicly available sequencing data from the study "Genome assembly, comparative genomics, and identification of genes/pathways underlying plant growth-promoting traits of an actinobacterial strain, Amycolatopsis sp. (BCA-696)" which focused on generating the draft genome sequence of an agriculturally important actinobacterial species Amycolatopsis sp. BCA-696 and characterizing it. Approximately 9.905 million paired-end (100 bp × 2) and ~ 6.242 million mate pair (250 bp × 2) reads were sequenced on the Illumina HiSeq 2500.
 
 ---
 
 ## 2. How to download
 
-The data for the sample is available as raw reads are available at DDBJ/ENA/GenBank under the BioProject with the Bioproject no. PRJNA981674 and SRA accession SRR25007833.
+The data for the sample is available as raw reads are available on NICB under Bioproject ID: PRJNA765508.
 ### Code for downloading
 
 ```bash
-geofetch -i GSE296035 --just-metadata
-SRRS=("SRR25007833")
+SRRS=("SRR25722949")
 
 for SRR in "${SRRS[@]}"; do
     echo "Downloading $SRR ..."
@@ -27,14 +26,14 @@ done
 
 ## 3. Pre-processing 
 
-From the GEO where the raw data fastq files are, we selected 3 samples and downloaded using their SRR accessions as per above script (Code for Downloaded)
+Miniarization was done by compressing the fastq reads using zip
 
 1. **STEP 1** ...
 
-Example:
-
 ```bash
-CODE TO SUBSAMPLE
+gunzip *.fastq.gz
+for file in *.fastq; do
+ zip "${file}.zip" "$file"; done
 ```
 
 
@@ -55,11 +54,19 @@ The workflow files are stored in `workflow/`.
 **Command:**
 
 ```bash
-module load fastqc-0.11.7
-WKD="/data/Microbial_Genomics_PGRG5"
-cd $WKD
+# Input data
+READS_PE1="SRR25722949_1.fastq.gz"
+READS_PE2="SRR25722949_2.fastq.gz"
+OUTDIR="genome_assembly_pipeline"
+THREADS=16
 
-fastqc -o "/data/Microbial_Genomics_PGRG5" PGRG5_R1.fq.1 PGRG5_R2.fq.1                                          
+mkdir -p $OUTDIR
+cd $OUTDIR
+
+# Step 1: Raw Quality Check (FastQC)
+echo ">>> Running FastQC on raw reads..."
+mkdir -p fastqc_raw
+fastqc -t $THREADS $READS_PE1 $READS_PE2 -o fastqc_raw                                      
 
 ```
 
@@ -74,91 +81,104 @@ fastqc -o "/data/Microbial_Genomics_PGRG5" PGRG5_R1.fq.1 PGRG5_R2.fq.1
 **Command:**
 
 ```bash
-#Run Trimmomatic on paired-end reads
-java -jar $TRIMMOMATIC \
-PE -phred33 -validatePairs PGRG5_R1.fq.1 PGRG5_R2.fq.1 PGRG5_R1.trim.fq.1  PGRG5_R1.unpaired.fq.1 PGRG5_R2.trim.fq.1 PGRG5_R2.unpaired.fq.1 LEADING:25 TRAILING:25 SLIDINGWINDOW:4:20 MINLEN:100
+echo ">>> Running Trimmomatic..."
+TRIM_JAR=/apps/chpc/bio/trimmomatic/0.39/trimmomatic-0.39.jar
 
+java -jar $TRIM_JAR PE -threads $THREADS \
+   $PBS_O_WORKDIR/$READS_PE1 $PBS_O_WORKDIR/$READS_PE2 \
+   trimmed_R1_paired.fq.gz trimmed_R1_unpaired.fq.gz \
+   trimmed_R2_paired.fq.gz trimmed_R2_unpaired.fq.gz \
+   ILLUMINACLIP:/apps/chpc/bio/trimmomatic/0.39/adapters/TruSeq3-PE.fa:2:30:10 \
+   SLIDINGWINDOW:4:20 MINLEN:50
 ```
 ---
 
-### Step 3 – Mapping
+### Step 3 –  Post-trimming Quality Check 
 
-**Purpose:** the pipeline maps the reads to the reference genome
-**Tools:** 'BWA'
-**Inputs:** count matrix
-**Outputs:** Normalized expression values (CPM), Log2 fold-changes (manual + statistical), differential expression test results ('fit2')
+**Purpose:** The workflow takes each trimmed FASTQ.qz file , assess the quality of the reads and give the scores and overall stats on the quality of trimmed reads.
+**Tools:** 'fastqc'
+**Inputs:** trimmed fastq reads
+**Outputs:** quality matrix (html)
 **Command:**
 ```bash
-bwa mem -t 16 Reference.fna PGRG5_R1.trim.fq.1 PGRG5_R2.trim.fq.1 > Mapped.sam
+echo ">>> Running FastQC on trimmed reads..."
+mkdir -p fastqc_trimmed
+fastqc -t $THREADS trimmed_R1_paired.fq.gz trimmed_R2_paired.fq.gz -o fastqc_trimmed
 
 ```
-### Step 4 - BAM TO SAM AND SORTING
+### Step 4 - Assembly with SOAPdenovo
 
-**Purpose:** This part of the workflow converts the .sam file to .bam file the sorts it and index the bam file
-**Tools:** 'Samtools'
-**Inputs:** .sam file
-**Outputs:** .bam file, .bam.bai file
-**Command:**
-
-```bash
-samtools view -b Mapped.sam > Mapped.bam
-samtools sort -@ 4 -o Mapped.sorted.bam Mapped.bam
-samtools index Mapped.sorted.bam
-
-
-```
----
-### Step 5 - Generate Consensus
-
-**Purpose:** This part of the workflow takes the mapped sorted bam file and generate a gap consensus genome
-**Tools:** 'samtools'
-**Inputs:** bam file
-**Outputs:** .fa file
-**Command:**
-
-```bash
-samtools consensus -f fasta -o consensus.fa Mapped.sorted.bam
-
-```
----
-
-### Step 6 - Variant Calling
-
-**Purpose:** This part of the workflow uses bcftools to identify SNPs and Indels from the sorted bam file of the mapping, index the generated vcf file with snps then filter the snps.The variants 
-are then annotated using bedtools
-**Tools:** 'bcftools', 'bedtools'
-**Inputs:** sorted bam file
-**Outputs:** .vcf.gz file
-**Command:**
-
-```bash
-REFERENCE="Reference.fna"
-BAM="Mapped.sorted.bam"
-#variant calling
-bcftools mpileup -f $REFERENCE $BAM | bcftools call --ploidy 1 -mv -Oz -o variants.vcf.gz 
-
-bcftools index variants.vcf.gz
-
-bcftools filter -i 'AF>0.25' variants.vcf.gz -Oz -o filtered_variants.vcf.gz
-#Variant annotation
-bcftools query -f '%CHROM\t%POS0\t%POS\t%ID\n' filtered_variants.vcf.gz > variants.bed
-bedtools intersect -a variants.bed -b features.bed -wa -wb > annotated_variants.txt
-
-```
----
-### Step 7 - De-novo assembly
-
-**Purpose:** This part of the workflow makes a de novo assembly using spaded and then prokka is used for contig annotation
-**Tools:** 'Spades', 'Prokka'
-**Inputs:** .fq file
+**Purpose:** This part of the workflow assembly the genome using SOAPdenovo to form contigs
+**Tools:** 'SOAPdenovo'
+**Inputs:** .trimmed.fastq files/reads, config_file.txt
 **Outputs:** .fasta
 **Command:**
 
 ```bash
-spades.py -1 PGRG5_R1.fq -2 PGRG5_R2.fq --isolate -o spades_output -t 4
+if [ ! -f $PBS_O_WORKDIR/config_file.txt ]; then
+  echo "ERROR: config_file.txt not found in $PBS_O_WORKDIR"
+  exit 1
+fi
 
-prokka spades_output/contigs.fasta --outdir prokka_output --prefix PGRG5
+echo ">>> Running SOAPdenovo..."
+SOAPdenovo-127mer all -s $PBS_O_WORKDIR/config_file.txt -K 63 -R -o soapdenovo_out -p $THREADS
 
+
+```
+---
+### Step 5 - Assembly with SPAdes
+
+**Purpose:** This part of the workflow assemble the genome using SPAdes to form contigs
+**Tools:** 'Spades'
+**Inputs:** trimmed fastq reads
+**Outputs:** .fasta file
+**Command:**
+
+```bash
+echo ">>> Running SPAdes..."
+spades.py -1 trimmed_R1_paired.fq.gz -2 trimmed_R2_paired.fq.gz \
+   -o spades_out -t $THREADS -m 60
+
+```
+---
+
+### Step 6 - Assess assemblies with QUAST
+
+**Purpose:** This part of the workflow uses quast to assess the quality of the assembled genomes
+**Tools:** 'QUAST'
+**Inputs:** .fasta
+**Outputs:** html, .txt file
+**Command:**
+
+```bash
+if [ -f spades_out/scaffolds.fasta ]; then
+    echo ">>> Running QUAST..."
+    quast.py soapdenovo_out.scafSeq spades_out/scaffolds.fasta -o quast_out -t $THREADS
+else
+    echo "WARNING: SPAdes output not found, skipping QUAST"
+fi
+
+```
+---
+### Step 7 - Step 7: Filter contigs <500 bp
+
+**Purpose:** This part of the workflow filters contigs that are less than 500 bp, for contiguity and to ensure quality of assembly
+**Tools:** 'bash/awk'
+**Inputs:** scaffolds.fasta
+**Outputs:** filtered.fasta
+**Command:**
+
+```bash
+if [ -f spades_out/scaffolds.fasta ]; then
+    echo ">>> Filtering contigs <500bp..."
+    awk '/^>/ {if (seqlen>=500) print seqname"\n"seq; seq=""; seqlen=0; seqname=$0}
+         /^[^>]/ {seqlen+=length($0); seq=seq$0}
+         END {if (seqlen>=500) print seqname"\n"seq}' spades_out/scaffolds.fasta > filtered_contigs.fasta
+else
+    echo "WARNING: No SPAdes scaffolds to filter"
+fi
+
+echo ">>> Pipeline finished at $(date)"
 
 ```
 ---

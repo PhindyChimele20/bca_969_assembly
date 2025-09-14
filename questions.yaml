@@ -1,27 +1,31 @@
 questions:
   - id: q1
-    stage: quality_control
+    stage: quality_control(raw_reads)
     text: |
-      How many total sequences were flagged for being poor quality?
+      What is the %GC of read sample SRR25722949_2.fastq?
     answer_type: numeric_percent
+     tolerance: 0.5
   - id: q2
-    stage: alignment
+    stage: quality_control(trimmed_reads)
     text: |
-      What is the total number of reads with quality score less than 20?
+      What is the total number of sequences of trimmed_R2_paired.fq?
     answer_type: integer_exact
+    tolerance: 0.80
   - id: q3
-    stage: alignment
+    stage: assembly
     text: |
-      What percent of reads uniquely map to the reference genome?
-    answer_type: numeric_percent
+      What is the overall number of gaps in the assembly?
+    answer_type: integer_exact
     tolerance: 0.75
   - id: q4
-    stage: variant_calling
+    stage: assembly
     text: |
-      How many total variants were found?
+      What is the size of the longest scaffold?
     answer_type: integer_exact
+    tolerance: 0.75
   - id: q5
-    stage: variant_calling
+    stage: genome assessment with quast
     text: |
-      How many variant sites have at least 1 alternate allele call?
+      What is the N50 value?
     answer_type: integer_exact
+    tolerance: 0.5

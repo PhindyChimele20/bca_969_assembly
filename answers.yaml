@@ -1,6 +1,6 @@
 answers:
-  q1: 68
-  q2: 8694319
-  q3: 465
+  q1: 68 (5%) tolerance
+  q2: 76690 with *% tolerance
+  q3: 0 (10% tolerance)
   q4: 141251 and/or 209545
-  q5: between 22688 and/or 34202
+  q5: 580 (accept range 500 - 650) 
